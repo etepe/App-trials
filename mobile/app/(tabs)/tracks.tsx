@@ -7,6 +7,7 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
@@ -23,6 +24,7 @@ export default function TracksScreen() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadTracks = useCallback(async () => {
     const stored = await listTracks();
@@ -31,6 +33,12 @@ export default function TracksScreen() {
   }, []);
 
   useEffect(() => { loadTracks(); }, [loadTracks]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadTracks();
+    setRefreshing(false);
+  }, [loadTracks]);
 
   const handleImport = useCallback(async () => {
     setImporting(true);
@@ -67,7 +75,7 @@ export default function TracksScreen() {
         const buffer = _b64ToArrayBuffer(b64);
         parsed = await parseKmz(buffer);
       } else {
-        Alert.alert('Unsupported format', `Files with .${ext} extension are not supported.\nSupported: GPX, FIT, IGC, KML, KMZ`);
+        Alert.alert('Desteklenmeyen format', `.${ext} uzantılı dosyalar desteklenmiyor.\nDesteklenen: GPX, FIT, IGC, KML, KMZ`);
         return;
       }
 
@@ -75,19 +83,19 @@ export default function TracksScreen() {
 
       await saveTrack(parsed);
       await loadTracks();
-      Alert.alert('Track imported', `"${parsed.name}" added to your library.`);
+      Alert.alert('Rota eklendi', `"${parsed.name}" kütüphanenize eklendi.`);
     } catch (e) {
-      Alert.alert('Import failed', String(e));
+      Alert.alert('İçe aktarma başarısız', String(e));
     } finally {
       setImporting(false);
     }
   }, [loadTracks]);
 
   const handleDelete = useCallback(async (trackId: string) => {
-    Alert.alert('Delete track', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert('Rotayı sil', 'Bu işlem geri alınamaz.', [
+      { text: 'İptal', style: 'cancel' },
       {
-        text: 'Delete',
+        text: 'Sil',
         style: 'destructive',
         onPress: async () => {
           await deleteTrack(trackId);
@@ -113,24 +121,25 @@ export default function TracksScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Tracks</Text>
+        <Text style={styles.headerTitle}>Rotalarım</Text>
         <TouchableOpacity style={styles.importBtn} onPress={handleImport} disabled={importing}>
           {importing ? (
             <ActivityIndicator color="#7eb8f7" size="small" />
           ) : (
-            <Text style={styles.importBtnText}>+ Import</Text>
+            <Text style={styles.importBtnText}>+ İçe Aktar</Text>
           )}
         </TouchableOpacity>
       </View>
 
       {tracks.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No tracks yet</Text>
+          <Text style={styles.emptyIcon}>📍</Text>
+          <Text style={styles.emptyTitle}>Henüz rota yok</Text>
           <Text style={styles.emptyDesc}>
-            Import a GPX, FIT, IGC, or KML/KMZ file to visualize it on the 3D globe.
+            GPX, FIT, IGC veya KML/KMZ dosyası içe aktararak 3D kürede görüntüleyin.
           </Text>
           <TouchableOpacity style={styles.emptyBtn} onPress={handleImport}>
-            <Text style={styles.emptyBtnText}>Import Track</Text>
+            <Text style={styles.emptyBtnText}>Rota İçe Aktar</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -146,6 +155,15 @@ export default function TracksScreen() {
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#7eb8f7"
+              colors={['#7eb8f7']}
+              progressBackgroundColor="#1a2035"
+            />
+          }
         />
       )}
     </View>
@@ -185,6 +203,7 @@ const styles = StyleSheet.create({
   importBtnText: { color: '#7eb8f7', fontWeight: '700', fontSize: 14 },
   list: { padding: 12 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 },
+  emptyIcon: { fontSize: 48, marginBottom: 4 },
   emptyTitle: { color: '#e8eaf6', fontSize: 20, fontWeight: '700' },
   emptyDesc: { color: '#6b7a99', fontSize: 14, textAlign: 'center', lineHeight: 20 },
   emptyBtn: { backgroundColor: '#2d4a7a', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10, marginTop: 8 },

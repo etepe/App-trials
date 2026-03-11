@@ -8,7 +8,11 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Keyboard,
+  TouchableWithoutFeedback,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CesiumWebView, { BridgeMessage, CesiumWebViewRef } from '../../components/CesiumWebView';
 import { searchMountains, getWeather, analyzeTerain, Mountain, WeatherData } from '../../services/api';
@@ -37,7 +41,9 @@ function WeatherCard({ weather, onClose }: { weather: WeatherData; onClose: () =
         <Text style={wStyles.title}>
           Hava Durumu {weather.elevation_m > 0 ? `(${Math.round(weather.elevation_m)}m)` : ''}
         </Text>
-        <TouchableOpacity onPress={onClose}><Text style={wStyles.close}>✕</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={wStyles.closeBtn}>
+          <Text style={wStyles.close}>✕</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={wStyles.row}>
@@ -81,7 +87,8 @@ const wStyles = StyleSheet.create({
   card: { backgroundColor: '#1a2035', borderRadius: 12, padding: 14, margin: 10, borderWidth: 1, borderColor: '#2a3050' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   title: { color: '#e8eaf6', fontWeight: '700', fontSize: 14 },
-  close: { color: '#6b7a99', fontSize: 18, paddingHorizontal: 4 },
+  closeBtn: { padding: 6, borderRadius: 12, backgroundColor: '#242d45' },
+  close: { color: '#6b7a99', fontSize: 16, lineHeight: 18, width: 18, textAlign: 'center' },
   row: { flexDirection: 'row', justifyContent: 'space-around' },
   stat: { alignItems: 'center' },
   statVal: { color: '#7eb8f7', fontSize: 18, fontWeight: '700' },
@@ -106,15 +113,20 @@ function MountainPanel({
     <View style={mStyles.panel}>
       <View style={mStyles.header}>
         <Text style={mStyles.title}>Yakın Zirveler ({mountains.length})</Text>
-        <TouchableOpacity onPress={onClose}><Text style={mStyles.close}>✕</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={mStyles.closeBtn}>
+          <Text style={mStyles.close}>✕</Text>
+        </TouchableOpacity>
       </View>
       <ScrollView style={mStyles.list} showsVerticalScrollIndicator={false}>
         {mountains.map((m) => (
-          <TouchableOpacity key={m.osm_id} style={mStyles.item} onPress={() => onSelect(m)}>
-            <Text style={mStyles.name}>{m.name}</Text>
-            <Text style={mStyles.meta}>
-              {m.elevation ? `${Math.round(m.elevation)}m` : ''} {m.type}
-            </Text>
+          <TouchableOpacity key={m.osm_id} style={mStyles.item} onPress={() => onSelect(m)} activeOpacity={0.6}>
+            <View style={mStyles.itemContent}>
+              <Text style={mStyles.name}>{m.name}</Text>
+              <Text style={mStyles.meta}>
+                {m.elevation ? `${Math.round(m.elevation)}m` : ''} · {m.type}
+              </Text>
+            </View>
+            <Text style={mStyles.chevron}>›</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -126,17 +138,21 @@ const mStyles = StyleSheet.create({
   panel: { backgroundColor: '#1a2035', borderRadius: 12, margin: 10, maxHeight: 220, borderWidth: 1, borderColor: '#2a3050' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#2a3050' },
   title: { color: '#e8eaf6', fontWeight: '700', fontSize: 14 },
-  close: { color: '#6b7a99', fontSize: 18, paddingHorizontal: 4 },
+  closeBtn: { padding: 6, borderRadius: 12, backgroundColor: '#242d45' },
+  close: { color: '#6b7a99', fontSize: 16, lineHeight: 18, width: 18, textAlign: 'center' },
   list: { padding: 8 },
-  item: { paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#242d45' },
+  item: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#242d45' },
+  itemContent: { flex: 1 },
   name: { color: '#e8eaf6', fontSize: 14, fontWeight: '600' },
   meta: { color: '#6b7a99', fontSize: 12, marginTop: 2 },
+  chevron: { color: '#4a5568', fontSize: 20, fontWeight: '300', marginLeft: 8 },
 });
 
 // ─── Globe Screen ───────────────────────────────────────────────────────────
 
 export default function GlobeScreen() {
   const cesiumRef = useRef<CesiumWebViewRef>(null);
+  const insets = useSafeAreaInsets();
 
   // Settings loaded from AsyncStorage
   const [apiUrl, setApiUrl] = useState<string>(DEFAULT_API_URL);
@@ -272,7 +288,7 @@ export default function GlobeScreen() {
       />
 
       {/* Search bar */}
-      <View style={styles.searchBar}>
+      <View style={[styles.searchBar, { top: Math.max(insets.top + 4, 12) }]}>
         <TextInput
           style={styles.searchInput}
           placeholder="Dağ ara…"
@@ -281,18 +297,23 @@ export default function GlobeScreen() {
           onChangeText={setSearchQuery}
           onSubmitEditing={handleSearch}
           returnKeyType="search"
+          blurOnSubmit
         />
-        <TouchableOpacity style={styles.searchBtn} onPress={handleSearch} disabled={searching}>
+        <TouchableOpacity
+          style={styles.searchBtn}
+          onPress={() => { Keyboard.dismiss(); handleSearch(); }}
+          disabled={searching}
+        >
           {searching ? (
             <ActivityIndicator color="#7eb8f7" size="small" />
           ) : (
-            <Text style={styles.searchBtnText}>Ara</Text>
+            <Text style={styles.searchBtnText}>🔍 Ara</Text>
           )}
         </TouchableOpacity>
       </View>
 
       {/* Analysis toolbar */}
-      <View style={styles.toolbar}>
+      <View style={[styles.toolbar, { top: Math.max(insets.top + 56, 64) }]}>
         <TouchableOpacity
           style={[styles.toolBtn, analysisMode === 'slope' && styles.toolBtnActive]}
           onPress={() => {
@@ -363,15 +384,15 @@ const styles = StyleSheet.create({
   globe: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   searchBar: {
-    position: 'absolute', top: 12, left: 12, right: 12,
+    position: 'absolute', left: 12, right: 12,
     flexDirection: 'row',
-    backgroundColor: '#1a2035dd',
+    backgroundColor: '#1a2035ee',
     borderRadius: 10, borderWidth: 1, borderColor: '#2a3050', overflow: 'hidden',
   },
   searchInput: { flex: 1, color: '#e8eaf6', paddingHorizontal: 14, paddingVertical: 10, fontSize: 14 },
   searchBtn: { paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', backgroundColor: '#2d4a7a' },
   searchBtnText: { color: '#7eb8f7', fontWeight: '700', fontSize: 13 },
-  toolbar: { position: 'absolute', top: 64, right: 12 },
+  toolbar: { position: 'absolute', right: 12 },
   toolBtn: {
     backgroundColor: '#1a2035dd', paddingVertical: 7, paddingHorizontal: 12,
     borderRadius: 8, borderWidth: 1, borderColor: '#2a3050', marginBottom: 6,

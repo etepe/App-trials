@@ -13,6 +13,7 @@ export default function TrackCard({ track, onPress, onDelete, onVisualize }: Pro
   const distKm = track.distanceM ? (track.distanceM / 1000).toFixed(1) : null;
   const durMin = track.durationSec ? Math.round(track.durationSec / 60) : null;
   const maxAlt = track.maxAltM ? `${Math.round(track.maxAltM)}m` : null;
+  const durFormatted = durMin ? (durMin >= 60 ? `${Math.floor(durMin / 60)}s ${durMin % 60}dk` : `${durMin} dk`) : null;
 
   const formatType = (t: string) => t.toUpperCase();
   const formatDate = (iso: string) => {
@@ -41,30 +42,30 @@ export default function TrackCard({ track, onPress, onDelete, onVisualize }: Pro
             <Text style={styles.statLabel}>km</Text>
           </View>
         )}
-        {durMin && (
+        {durFormatted && (
           <View style={styles.stat}>
-            <Text style={styles.statValue}>{durMin}</Text>
-            <Text style={styles.statLabel}>min</Text>
+            <Text style={styles.statValue}>{durFormatted}</Text>
+            <Text style={styles.statLabel}>süre</Text>
           </View>
         )}
         {maxAlt && (
           <View style={styles.stat}>
             <Text style={styles.statValue}>{maxAlt}</Text>
-            <Text style={styles.statLabel}>max alt</Text>
+            <Text style={styles.statLabel}>maks. irt.</Text>
           </View>
         )}
         <View style={styles.stat}>
           <Text style={styles.statValue}>{track.pointCount}</Text>
-          <Text style={styles.statLabel}>pts</Text>
+          <Text style={styles.statLabel}>nokta</Text>
         </View>
       </View>
 
       <View style={styles.actions}>
         <TouchableOpacity style={styles.actionBtn} onPress={onVisualize}>
-          <Text style={styles.actionText}>3D View</Text>
+          <Text style={styles.actionText}>3D Görünüm</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={onDelete}>
-          <Text style={[styles.actionText, styles.deleteText]}>Delete</Text>
+          <Text style={[styles.actionText, styles.deleteText]}>Sil</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>

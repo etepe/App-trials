@@ -16,7 +16,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="mountain/[id]"
-          options={{ title: 'Mountain Detail', presentation: 'card' }}
+          options={{ title: 'Dağ Detayı', presentation: 'card' }}
         />
       </Stack>
     </>
