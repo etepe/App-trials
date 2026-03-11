@@ -13,10 +13,12 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CesiumWebView, { BridgeMessage, CesiumWebViewRef } from '../../components/CesiumWebView';
-import { searchMountains, getWeather, analyzeTerain, Mountain, WeatherData } from '../../services/api';
-import { getCachedMountains, cacheMountains } from '../../services/storage/offlineCache';
+import { searchMountains, getWeather, analyzeTerrain, Mountain, WeatherData, ElevationPoint } from '../../services/api';
+import { getCachedMountains, cacheMountains, loadTrackGeojson, listTracks } from '../../services/storage/offlineCache';
+import ElevationProfile from '../../components/ElevationProfile';
 
 const DEFAULT_API_URL = 'http://localhost:8000';
 
@@ -153,6 +155,7 @@ const mStyles = StyleSheet.create({
 export default function GlobeScreen() {
   const cesiumRef = useRef<CesiumWebViewRef>(null);
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ trackId?: string; flyLat?: string; flyLon?: string; flyAlt?: string }>();
 
   // Settings loaded from AsyncStorage
   const [apiUrl, setApiUrl] = useState<string>(DEFAULT_API_URL);
@@ -168,6 +171,7 @@ export default function GlobeScreen() {
   const [loadingWeather, setLoadingWeather] = useState(false);
   const [analysisMode, setAnalysisMode] = useState<'slope' | 'aspect' | null>(null);
   const [lastClickPos, setLastClickPos] = useState<{ lat: number; lon: number; elevation: number } | null>(null);
+  const [elevationProfile, setElevationProfile] = useState<ElevationPoint[] | null>(null);
 
   // Load settings from AsyncStorage on mount
   useEffect(() => {
@@ -181,6 +185,34 @@ export default function GlobeScreen() {
       setSettingsLoaded(true);
     })();
   }, []);
+
+  // Load track from navigation params (when coming from Tracks screen)
+  useEffect(() => {
+    if (!ready || !params.trackId) return;
+    (async () => {
+      try {
+        const tracks = await listTracks();
+        const track = tracks.find((t) => t.id === params.trackId);
+        if (!track) return;
+        const geojson = await loadTrackGeojson(track);
+        cesiumRef.current?.clearTracks();
+        cesiumRef.current?.loadTrack(geojson, { color: '#2ecc71', width: 3, flyTo: true });
+      } catch (e) {
+        console.warn('Failed to load track:', e);
+      }
+    })();
+  }, [ready, params.trackId]);
+
+  // Fly to location from navigation params (when coming from Mountain detail)
+  useEffect(() => {
+    if (!ready || !params.flyLat || !params.flyLon) return;
+    const lat = parseFloat(params.flyLat);
+    const lon = parseFloat(params.flyLon);
+    const alt = params.flyAlt ? parseFloat(params.flyAlt) : 5000;
+    if (!isNaN(lat) && !isNaN(lon)) {
+      cesiumRef.current?.flyToLocation(lat, lon, alt, 0, -35);
+    }
+  }, [ready, params.flyLat, params.flyLon, params.flyAlt]);
 
   // Build Cesium WebView URL — token passed as query param so index.html can read it
   const cesiumUrl = `${apiUrl}/static/cesium/index.html${
@@ -256,7 +288,7 @@ export default function GlobeScreen() {
     const { lat, lon } = lastClickPos;
     const delta = 0.1;
     try {
-      const result = await analyzeTerain(
+      const result = await analyzeTerrain(
         { minLon: lon - delta, minLat: lat - delta, maxLon: lon + delta, maxLat: lat + delta },
         type
       );
@@ -266,6 +298,26 @@ export default function GlobeScreen() {
       }
     } catch (e) {
       Alert.alert('Analiz başarısız', String(e));
+    }
+  }, [lastClickPos]);
+
+  const handleProfileAnalysis = useCallback(async () => {
+    if (!lastClickPos) {
+      Alert.alert('Alan seç', 'Önce bir dağ bölgesine dokunun.');
+      return;
+    }
+    const { lat, lon } = lastClickPos;
+    const delta = 0.05;
+    try {
+      const result = await analyzeTerrain(
+        { minLon: lon - delta, minLat: lat - delta, maxLon: lon + delta, maxLat: lat + delta },
+        'profile'
+      );
+      if (result.profile && result.profile.length > 0) {
+        setElevationProfile(result.profile);
+      }
+    } catch (e) {
+      Alert.alert('Profil analizi başarısız', String(e));
     }
   }, [lastClickPos]);
 
@@ -335,6 +387,16 @@ export default function GlobeScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={[styles.toolBtn, elevationProfile ? styles.toolBtnActive : null]}
+          onPress={() => {
+            if (elevationProfile) setElevationProfile(null);
+            else handleProfileAnalysis();
+          }}
+        >
+          <Text style={styles.toolBtnText}>Profil</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.toolBtn}
           onPress={() => {
             cesiumRef.current?.clearMarkers();
@@ -342,6 +404,7 @@ export default function GlobeScreen() {
             setAnalysisMode(null);
             setShowMountains(false);
             setWeather(null);
+            setElevationProfile(null);
           }}
         >
           <Text style={styles.toolBtnText}>Temizle</Text>
@@ -364,6 +427,12 @@ export default function GlobeScreen() {
             mountains={mountains}
             onSelect={handleMountainSelect}
             onClose={() => setShowMountains(false)}
+          />
+        )}
+        {elevationProfile && (
+          <ElevationProfile
+            profile={elevationProfile}
+            onClose={() => setElevationProfile(null)}
           />
         )}
       </View>
