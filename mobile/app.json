@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Mountain Explorer",
+    "slug": "mountain-explorer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0f1e"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mountainexplorer.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Mountain Explorer uses your location to show nearby peaks.",
+        "NSLocationAlwaysUsageDescription": "Mountain Explorer uses your location for tracking."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0f1e"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "package": "com.mountainexplorer.app"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Mountain Explorer to use your location."
+        }
+      ]
+    ],
+    "scheme": "mountain-explorer",
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    }
+  }
+}
