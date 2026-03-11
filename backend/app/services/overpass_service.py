@@ -65,6 +65,29 @@ async def search_peaks(
     return mountains[:50]  # cap at 50 results
 
 
+async def search_peaks_by_name(name: str) -> List[Mountain]:
+    """Search for peaks globally by name (no location constraint)."""
+    query = f"""
+[out:json][timeout:20];
+(
+  node["natural"="peak"]["name"~"{name}",i];
+  node["natural"="summit"]["name"~"{name}",i];
+);
+out body 30;
+"""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.post(OVERPASS_URL, data={"data": query})
+        resp.raise_for_status()
+        data = resp.json()
+
+    elements = data.get("elements", [])
+    mountains = [_parse_element(el) for el in elements if el.get("type") == "node"]
+
+    # Sort by elevation descending (most prominent first)
+    mountains.sort(key=lambda m: m.elevation or 0, reverse=True)
+    return mountains[:30]
+
+
 async def get_peak(osm_id: str) -> Optional[Mountain]:
     query = f"""
 [out:json][timeout:10];

@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { getMountain, Mountain } from '../../services/api';
+import { getMountain } from '../../services/api';
+import type { Mountain } from '../../shared/types';
 
 export default function MountainDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -87,17 +88,36 @@ export default function MountainDetailScreen() {
       )}
 
       {/* Actions */}
-      <TouchableOpacity
-        style={styles.actionBtn}
-        onPress={() => {
-          router.push({
-            pathname: '/(tabs)/globe',
-            params: { flyLat: mountain.lat, flyLon: mountain.lon, flyAlt: (mountain.elevation ?? 1000) + 3000 },
-          });
-        }}
-      >
-        <Text style={styles.actionBtnText}>View in 3D Globe</Text>
-      </TouchableOpacity>
+      <View style={{ gap: 10, marginTop: 8 }}>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => {
+            router.push({
+              pathname: '/(tabs)/globe',
+              params: { flyLat: mountain.lat, flyLon: mountain.lon, flyAlt: (mountain.elevation ?? 1000) + 3000 },
+            });
+          }}
+        >
+          <Text style={styles.actionBtnText}>View in 3D Globe</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: '#1a3a5a', borderWidth: 1, borderColor: '#7eb8f7' }]}
+          onPress={() => {
+            router.push({
+              pathname: '/(tabs)/globe',
+              params: {
+                inspectLat: mountain.lat,
+                inspectLon: mountain.lon,
+                inspectAlt: mountain.elevation ?? 1000,
+                inspectName: mountain.name,
+              },
+            });
+          }}
+        >
+          <Text style={styles.actionBtnText}>Inspect Mountain Face</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }

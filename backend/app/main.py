@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import mountains, terrain, weather, tracks
+from app.routers import mountains, terrain, weather, tracks, analysis
 
 app = FastAPI(
     title="Mountain Explorer API",
@@ -23,6 +23,7 @@ app.include_router(mountains.router, prefix="/mountains", tags=["mountains"])
 app.include_router(terrain.router, prefix="/terrain", tags=["terrain"])
 app.include_router(weather.router, prefix="/weather", tags=["weather"])
 app.include_router(tracks.router, prefix="/tracks", tags=["tracks"])
+app.include_router(analysis.router, prefix="/analysis", tags=["analysis"])
 
 
 @app.get("/health")
