@@ -6,9 +6,9 @@ router = APIRouter()
 
 @router.get("")
 async def get_weather(
-    lat: float = Query(...),
-    lon: float = Query(...),
-    elevation: float = Query(0, description="Elevation in meters (improves forecast accuracy)"),
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    elevation: float = Query(0, ge=-500, le=9000, description="Elevation in meters (improves forecast accuracy)"),
     days: int = Query(3, ge=1, le=7),
 ):
     """

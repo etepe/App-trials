@@ -12,18 +12,56 @@ interface ApiOptions {
   signal?: AbortSignal;
 }
 
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [1000, 2000, 4000]; // exponential backoff
+
 async function apiRequest<T>(path: string, init?: RequestInit & ApiOptions): Promise<T> {
   const base = await getBaseUrl();
   const url = `${base}${path}`;
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-    ...init,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+        ...init,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        // Don't retry on client errors (4xx)
+        if (res.status >= 400 && res.status < 500) {
+          throw new Error(`API ${res.status}: ${text || res.statusText}`);
+        }
+        throw new Error(`API ${res.status}: ${text || res.statusText}`);
+      }
+      return res.json() as Promise<T>;
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      // Don't retry on client errors or abort signals
+      const isClientError = lastError.message.startsWith('API 4');
+      const isAborted = init?.signal?.aborted;
+      if (isClientError || isAborted || attempt === MAX_RETRIES) {
+        throw lastError;
+      }
+      // Wait before retrying on network/server errors
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt]));
+    }
   }
-  return res.json() as Promise<T>;
+  throw lastError ?? new Error('Request failed');
+}
+
+/**
+ * Check if the backend server is reachable.
+ * Returns true if health endpoint responds, false otherwise.
+ */
+export async function checkServerHealth(): Promise<boolean> {
+  try {
+    const base = await getBaseUrl();
+    const res = await fetch(`${base}/health`, { method: 'GET' });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 // ─── Mountains ──────────────────────────────────────────────────────────────
@@ -88,7 +126,7 @@ export interface ElevationPoint {
   lon: number;
 }
 
-export function analyzeTerain(
+export function analyzeTerrain(
   bbox: BBox,
   analysisType: AnalysisType,
   opts?: ApiOptions
@@ -185,4 +223,41 @@ export function getServerTrack(id: string, opts?: ApiOptions): Promise<ServerTra
 
 export function deleteServerTrack(id: string, opts?: ApiOptions): Promise<void> {
   return apiRequest<void>(`/tracks/${id}`, { method: 'DELETE', ...opts });
+}
+
+// ─── Favorites ────────────────────────────────────────────────────────────────
+
+export interface Favorite {
+  id: number;
+  osm_id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  elevation: number | null;
+  type: string;
+  notes: string;
+  created_at: string;
+}
+
+export function listFavorites(opts?: ApiOptions): Promise<Favorite[]> {
+  return apiRequest<Favorite[]>('/favorites', opts);
+}
+
+export function addFavorite(
+  data: { osm_id: string; name: string; lat: number; lon: number; elevation?: number; type: string; notes?: string },
+  opts?: ApiOptions
+): Promise<Favorite> {
+  return apiRequest<Favorite>('/favorites', {
+    method: 'POST',
+    body: JSON.stringify(data),
+    ...opts,
+  });
+}
+
+export function removeFavorite(osmId: string, opts?: ApiOptions): Promise<void> {
+  return apiRequest<void>(`/favorites/${osmId}`, { method: 'DELETE', ...opts });
+}
+
+export function checkFavorite(osmId: string, opts?: ApiOptions): Promise<{ is_favorite: boolean }> {
+  return apiRequest<{ is_favorite: boolean }>(`/favorites/check/${osmId}`, opts);
 }
