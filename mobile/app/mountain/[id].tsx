@@ -35,9 +35,9 @@ export default function MountainDetailScreen() {
   if (error || !mountain) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorText}>{error ?? 'Mountain not found'}</Text>
+        <Text style={styles.errorText}>{error ?? 'Dağ bulunamadı'}</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backBtnText}>Go Back</Text>
+          <Text style={styles.backBtnText}>Geri Dön</Text>
         </TouchableOpacity>
       </View>
     );
@@ -56,18 +56,18 @@ export default function MountainDetailScreen() {
 
       {/* Coordinates */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Location</Text>
+        <Text style={styles.cardTitle}>Konum</Text>
         <View style={styles.cardRow}>
-          <Text style={styles.cardLabel}>Latitude</Text>
+          <Text style={styles.cardLabel}>Enlem</Text>
           <Text style={styles.cardValue}>{mountain.lat.toFixed(6)}°</Text>
         </View>
         <View style={styles.cardRow}>
-          <Text style={styles.cardLabel}>Longitude</Text>
+          <Text style={styles.cardLabel}>Boylam</Text>
           <Text style={styles.cardValue}>{mountain.lon.toFixed(6)}°</Text>
         </View>
         {mountain.elevation && (
           <View style={styles.cardRow}>
-            <Text style={styles.cardLabel}>Elevation</Text>
+            <Text style={styles.cardLabel}>Yükseklik</Text>
             <Text style={styles.cardValue}>{Math.round(mountain.elevation)}m / {Math.round(mountain.elevation * 3.28084)}ft</Text>
           </View>
         )}
@@ -76,7 +76,7 @@ export default function MountainDetailScreen() {
       {/* OSM tags */}
       {mountain.tags && Object.keys(mountain.tags).length > 0 && (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>OSM Tags</Text>
+          <Text style={styles.cardTitle}>OSM Etiketleri</Text>
           {Object.entries(mountain.tags).map(([k, v]) => (
             <View key={k} style={styles.cardRow}>
               <Text style={styles.cardLabel}>{k}</Text>
@@ -96,7 +96,7 @@ export default function MountainDetailScreen() {
           });
         }}
       >
-        <Text style={styles.actionBtnText}>View in 3D Globe</Text>
+        <Text style={styles.actionBtnText}>3D Kürede Görüntüle</Text>
       </TouchableOpacity>
     </ScrollView>
   );

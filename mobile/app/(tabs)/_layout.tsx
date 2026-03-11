@@ -1,10 +1,19 @@
 import { Tabs } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+
+const TAB_ICONS: Record<string, string> = {
+  globe: '🌍',
+  tracks: '📍',
+  settings: '⚙️',
+};
 
 function TabIcon({ label, active }: { label: string; active: boolean }) {
   return (
     <View style={styles.iconContainer}>
-      <View style={[styles.dot, active && styles.dotActive]} />
+      <Text style={[styles.iconText, active && styles.iconTextActive]}>
+        {TAB_ICONS[label] ?? '●'}
+      </Text>
+      {active && <View style={styles.activeIndicator} />}
     </View>
   );
 }
@@ -17,8 +26,9 @@ export default function TabLayout() {
           backgroundColor: '#0d1428',
           borderTopColor: '#1a2035',
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: 64,
+          paddingBottom: 10,
+          paddingTop: 4,
         },
         tabBarActiveTintColor: '#7eb8f7',
         tabBarInactiveTintColor: '#4a5568',
@@ -31,7 +41,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="globe"
         options={{
-          title: 'Globe',
+          title: 'Küre',
           headerTitle: 'Mountain Explorer',
           tabBarIcon: ({ focused }) => <TabIcon label="globe" active={focused} />,
         }}
@@ -39,14 +49,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="tracks"
         options={{
-          title: 'Tracks',
+          title: 'Rotalar',
           tabBarIcon: ({ focused }) => <TabIcon label="tracks" active={focused} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
+          title: 'Ayarlar',
           tabBarIcon: ({ focused }) => <TabIcon label="settings" active={focused} />,
         }}
       />
@@ -55,7 +65,15 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  iconContainer: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4a5568' },
-  dotActive: { backgroundColor: '#7eb8f7' },
+  iconContainer: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  iconText: { fontSize: 18, opacity: 0.5 },
+  iconTextActive: { opacity: 1 },
+  activeIndicator: {
+    position: 'absolute',
+    bottom: -4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#7eb8f7',
+  },
 });

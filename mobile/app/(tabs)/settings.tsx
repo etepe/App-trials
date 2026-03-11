@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   Switch,
   Alert,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -42,6 +43,7 @@ export default function SettingsScreen() {
   const [unitsMetric, setUnitsMetric] = useState(true);
   const [thermalAlerts, setThermalAlerts] = useState(false);
   const [saved, setSaved] = useState(false);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
     (async () => {
@@ -66,12 +68,16 @@ export default function SettingsScreen() {
       AsyncStorage.setItem(KEYS.THERMAL_ALERTS, String(thermalAlerts)),
     ]);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    Animated.sequence([
+      Animated.timing(toastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.delay(1500),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setSaved(false));
   };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Section title="API & Services">
+      <Section title="API ve Servisler">
         <SettingRow label="Cesium Ion Token">
           <TextInput
             style={styles.input}
@@ -84,7 +90,7 @@ export default function SettingsScreen() {
             secureTextEntry
           />
         </SettingRow>
-        <SettingRow label="Backend URL">
+        <SettingRow label="Sunucu URL">
           <TextInput
             style={styles.input}
             value={apiUrl}
@@ -98,8 +104,8 @@ export default function SettingsScreen() {
         </SettingRow>
       </Section>
 
-      <Section title="Units & Display">
-        <SettingRow label="Metric units (m, km)">
+      <Section title="Birimler ve Görünüm">
+        <SettingRow label="Metrik birimler (m, km)">
           <Switch
             value={unitsMetric}
             onValueChange={setUnitsMetric}
@@ -109,8 +115,8 @@ export default function SettingsScreen() {
         </SettingRow>
       </Section>
 
-      <Section title="Paragliding / Hang-gliding">
-        <SettingRow label="Thermal condition alerts">
+      <Section title="Yamaç Paraşütü">
+        <SettingRow label="Termik durum uyarıları">
           <Switch
             value={thermalAlerts}
             onValueChange={setThermalAlerts}
@@ -120,22 +126,28 @@ export default function SettingsScreen() {
         </SettingRow>
       </Section>
 
-      <Section title="About">
+      <Section title="Hakkında">
         <View style={styles.aboutBox}>
           <Text style={styles.aboutTitle}>Mountain Explorer</Text>
-          <Text style={styles.aboutVersion}>Version 1.0.0</Text>
+          <Text style={styles.aboutVersion}>Sürüm 1.0.0</Text>
           <Text style={styles.aboutDesc}>
-            3D terrain explorer for outdoor athletes. Visualize mountain faces, analyze slope and aspect, and overlay your GPS tracks.
+            Doğa sporcuları için 3D arazi gezgini. Dağ yüzlerini görselleştirin, eğim ve bakı analizi yapın, GPS rotalarınızı görüntüleyin.
           </Text>
           <View style={styles.aboutLinks}>
-            <Text style={styles.aboutLink}>Data: Cesium Ion · OpenTopography · Open-Meteo · OSM</Text>
+            <Text style={styles.aboutLink}>Veri: Cesium Ion · OpenTopography · Open-Meteo · OSM</Text>
           </View>
         </View>
       </Section>
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-        <Text style={styles.saveBtnText}>{saved ? 'Saved!' : 'Save Settings'}</Text>
+        <Text style={styles.saveBtnText}>Ayarları Kaydet</Text>
       </TouchableOpacity>
+
+      {saved && (
+        <Animated.View style={[styles.toast, { opacity: toastOpacity }]}>
+          <Text style={styles.toastText}>✓ Ayarlar kaydedildi</Text>
+        </Animated.View>
+      )}
     </ScrollView>
   );
 }
@@ -196,4 +208,16 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   saveBtnText: { color: '#7eb8f7', fontSize: 15, fontWeight: '700' },
+  toast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 40,
+    right: 40,
+    backgroundColor: '#2ecc71',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  toastText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });
