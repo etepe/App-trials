@@ -19,12 +19,24 @@ import CesiumWebView, { BridgeMessage, CesiumWebViewRef } from '../../components
 import { searchMountains, getWeather, analyzeTerrain, Mountain, WeatherData, ElevationPoint } from '../../services/api';
 import { getCachedMountains, cacheMountains, loadTrackGeojson, listTracks } from '../../services/storage/offlineCache';
 import ElevationProfile from '../../components/ElevationProfile';
+import HourlyForecastChart from '../../components/HourlyForecastChart';
+import WeatherAlerts from '../../components/WeatherAlerts';
 
 const DEFAULT_API_URL = 'http://localhost:8000';
 
-// ─── Weather Card ───────────────────────────────────────────────────────────
+// ─── Weather Card (Enhanced) ────────────────────────────────────────────────
 
-function WeatherCard({ weather, onClose }: { weather: WeatherData; onClose: () => void }) {
+function WeatherCard({
+  weather,
+  onClose,
+  onShowHourly,
+  onShowAlerts,
+}: {
+  weather: WeatherData;
+  onClose: () => void;
+  onShowHourly: () => void;
+  onShowAlerts: () => void;
+}) {
   const w = weather.current;
   const deg2compass = (d: number) => {
     const dirs = ['N', 'KD', 'D', 'GD', 'G', 'GB', 'B', 'KB'];
@@ -37,27 +49,43 @@ function WeatherCard({ weather, onClose }: { weather: WeatherData; onClose: () =
     : weather.thermals?.conditions === 'moderate' ? '#e67e22'
     : '#e74c3c';
 
+  const uvColor = (uv: number) =>
+    uv >= 8 ? '#e74c3c' : uv >= 6 ? '#e67e22' : uv >= 3 ? '#f39c12' : '#2ecc71';
+
+  const alertCount = (weather as any).alerts?.length ?? 0;
+
   return (
     <View style={wStyles.card}>
       <View style={wStyles.header}>
-        <Text style={wStyles.title}>
-          Hava Durumu {weather.elevation_m > 0 ? `(${Math.round(weather.elevation_m)}m)` : ''}
-        </Text>
+        <View style={wStyles.headerLeft}>
+          <Text style={wStyles.title}>
+            {w.weather_description ?? 'Hava Durumu'}
+          </Text>
+          {weather.elevation_m > 0 && (
+            <Text style={wStyles.subtitle}>{Math.round(weather.elevation_m)}m</Text>
+          )}
+        </View>
         <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={wStyles.closeBtn}>
           <Text style={wStyles.close}>✕</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Main stats row */}
       <View style={wStyles.row}>
         <View style={wStyles.stat}>
           <Text style={wStyles.statVal}>{Math.round(w.temperature_c)}°C</Text>
-          <Text style={wStyles.statLbl}>Sıcaklık</Text>
+          <Text style={wStyles.statLbl}>
+            {w.feels_like_c != null ? `His: ${Math.round(w.feels_like_c)}°` : 'Sıcaklık'}
+          </Text>
         </View>
         <View style={wStyles.stat}>
           <Text style={wStyles.statVal}>{(w.wind_speed_ms * 3.6).toFixed(0)} km/h</Text>
-          <Text style={wStyles.statLbl}>Rüzgar {deg2compass(w.wind_direction_deg)}</Text>
+          <Text style={wStyles.statLbl}>
+            Rüzgar {deg2compass(w.wind_direction_deg)}
+            {w.wind_gusts_ms ? ` (R:${Math.round(w.wind_gusts_ms * 3.6)})` : ''}
+          </Text>
         </View>
-        {w.pressure_hpa && (
+        {w.pressure_hpa != null && (
           <View style={wStyles.stat}>
             <Text style={wStyles.statVal}>{Math.round(w.pressure_hpa)}</Text>
             <Text style={wStyles.statLbl}>hPa</Text>
@@ -65,6 +93,39 @@ function WeatherCard({ weather, onClose }: { weather: WeatherData; onClose: () =
         )}
       </View>
 
+      {/* Secondary stats row */}
+      <View style={[wStyles.row, { marginTop: 10 }]}>
+        {w.humidity_pct != null && (
+          <View style={wStyles.stat}>
+            <Text style={wStyles.statVal2}>{Math.round(w.humidity_pct)}%</Text>
+            <Text style={wStyles.statLbl}>Nem</Text>
+          </View>
+        )}
+        {w.uv_index != null && (
+          <View style={wStyles.stat}>
+            <Text style={[wStyles.statVal2, { color: uvColor(w.uv_index) }]}>
+              {Math.round(w.uv_index)}
+            </Text>
+            <Text style={wStyles.statLbl}>UV</Text>
+          </View>
+        )}
+        {w.freezing_level_m != null && (
+          <View style={wStyles.stat}>
+            <Text style={wStyles.statVal2}>{Math.round(w.freezing_level_m)}m</Text>
+            <Text style={wStyles.statLbl}>Donma Sv.</Text>
+          </View>
+        )}
+        {w.visibility_m != null && (
+          <View style={wStyles.stat}>
+            <Text style={wStyles.statVal2}>
+              {w.visibility_m >= 1000 ? `${(w.visibility_m / 1000).toFixed(1)}km` : `${Math.round(w.visibility_m)}m`}
+            </Text>
+            <Text style={wStyles.statLbl}>Görüş</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Thermal bar */}
       {weather.thermals && (
         <View style={[wStyles.thermalBar, { borderColor: thermalColor }]}>
           <Text style={[wStyles.thermalText, { color: thermalColor }]}>
@@ -73,12 +134,54 @@ function WeatherCard({ weather, onClose }: { weather: WeatherData; onClose: () =
               : weather.thermals.conditions === 'good' ? 'İyi'
               : weather.thermals.conditions === 'moderate' ? 'Orta'
               : 'Zayıf'}
+            {weather.thermals.thermal_index != null ? ` (${weather.thermals.thermal_index}/10)` : ''}
           </Text>
           {weather.thermals.thermal_height_m && (
             <Text style={wStyles.thermalSub}>
               Tavan ~{Math.round(weather.thermals.thermal_height_m)}m
             </Text>
           )}
+        </View>
+      )}
+
+      {/* Action buttons */}
+      <View style={wStyles.actions}>
+        <TouchableOpacity style={wStyles.actionBtn} onPress={onShowHourly}>
+          <Text style={wStyles.actionText}>Saatlik Tahmin</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[wStyles.actionBtn, alertCount > 0 && wStyles.actionBtnAlert]}
+          onPress={onShowAlerts}
+        >
+          <Text style={[wStyles.actionText, alertCount > 0 && { color: '#f39c12' }]}>
+            Uyarılar{alertCount > 0 ? ` (${alertCount})` : ''}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Daily summary (if available) */}
+      {(weather as any).daily && (weather as any).daily.length > 0 && (
+        <View style={wStyles.dailyRow}>
+          {((weather as any).daily as any[]).slice(0, 5).map((d: any, i: number) => {
+            const dayName = (() => {
+              try {
+                const date = new Date(d.date);
+                return ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'][date.getDay()];
+              } catch { return ''; }
+            })();
+            return (
+              <View key={i} style={wStyles.dailyItem}>
+                <Text style={wStyles.dailyDay}>{i === 0 ? 'Bugün' : dayName}</Text>
+                <Text style={wStyles.dailyTemp}>
+                  {d.temp_max_c != null ? `${Math.round(d.temp_max_c)}°` : '-'}
+                </Text>
+                <Text style={wStyles.dailyTempMin}>
+                  {d.temp_min_c != null ? `${Math.round(d.temp_min_c)}°` : ''}
+                </Text>
+                <Text style={wStyles.dailyDesc}>{d.weather_description ?? ''}</Text>
+              </View>
+            );
+          })}
         </View>
       )}
     </View>
@@ -88,16 +191,49 @@ function WeatherCard({ weather, onClose }: { weather: WeatherData; onClose: () =
 const wStyles = StyleSheet.create({
   card: { backgroundColor: '#1a2035', borderRadius: 12, padding: 14, margin: 10, borderWidth: 1, borderColor: '#2a3050' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  headerLeft: { flex: 1 },
   title: { color: '#e8eaf6', fontWeight: '700', fontSize: 14 },
+  subtitle: { color: '#6b7a99', fontSize: 11, marginTop: 1 },
   closeBtn: { padding: 6, borderRadius: 12, backgroundColor: '#242d45' },
   close: { color: '#6b7a99', fontSize: 16, lineHeight: 18, width: 18, textAlign: 'center' },
   row: { flexDirection: 'row', justifyContent: 'space-around' },
   stat: { alignItems: 'center' },
   statVal: { color: '#7eb8f7', fontSize: 18, fontWeight: '700' },
-  statLbl: { color: '#6b7a99', fontSize: 11, marginTop: 2 },
+  statVal2: { color: '#7eb8f7', fontSize: 14, fontWeight: '700' },
+  statLbl: { color: '#6b7a99', fontSize: 10, marginTop: 2 },
   thermalBar: { marginTop: 12, borderWidth: 1, borderRadius: 8, padding: 8, alignItems: 'center' },
   thermalText: { fontWeight: '700', fontSize: 13 },
   thermalSub: { color: '#6b7a99', fontSize: 11, marginTop: 2 },
+  actions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  actionBtn: {
+    flex: 1,
+    backgroundColor: '#242d45',
+    paddingVertical: 7,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  actionBtnAlert: {
+    borderWidth: 1,
+    borderColor: '#f39c1244',
+  },
+  actionText: { color: '#7eb8f7', fontSize: 12, fontWeight: '600' },
+  dailyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#2a3050',
+  },
+  dailyItem: { alignItems: 'center', flex: 1 },
+  dailyDay: { color: '#6b7a99', fontSize: 10, fontWeight: '600' },
+  dailyTemp: { color: '#e8eaf6', fontSize: 13, fontWeight: '700', marginTop: 2 },
+  dailyTempMin: { color: '#4a5568', fontSize: 11 },
+  dailyDesc: { color: '#4a5568', fontSize: 8, marginTop: 1, textAlign: 'center' },
 });
 
 // ─── Mountain Info Panel ────────────────────────────────────────────────────
@@ -172,6 +308,8 @@ export default function GlobeScreen() {
   const [analysisMode, setAnalysisMode] = useState<'slope' | 'aspect' | null>(null);
   const [lastClickPos, setLastClickPos] = useState<{ lat: number; lon: number; elevation: number } | null>(null);
   const [elevationProfile, setElevationProfile] = useState<ElevationPoint[] | null>(null);
+  const [showHourlyChart, setShowHourlyChart] = useState(false);
+  const [showAlerts, setShowAlerts] = useState(false);
 
   // Load settings from AsyncStorage on mount
   useEffect(() => {
@@ -412,15 +550,38 @@ export default function GlobeScreen() {
       </View>
 
       {/* Bottom overlays */}
-      <View style={styles.overlays}>
+      <ScrollView
+        style={styles.overlays}
+        contentContainerStyle={styles.overlaysContent}
+        showsVerticalScrollIndicator={false}
+        pointerEvents="box-none"
+      >
         {loadingWeather && (
           <View style={styles.loadingBar}>
             <ActivityIndicator color="#7eb8f7" size="small" />
             <Text style={styles.loadingText}>Hava durumu yükleniyor…</Text>
           </View>
         )}
+        {weather && !loadingWeather && showAlerts && (
+          <WeatherAlerts
+            alerts={(weather as any).alerts ?? []}
+            avalancheRisk={(weather as any).avalanche_risk}
+            onClose={() => setShowAlerts(false)}
+          />
+        )}
+        {weather && !loadingWeather && showHourlyChart && (weather as any).hourly && (
+          <HourlyForecastChart
+            hourly={(weather as any).hourly}
+            onClose={() => setShowHourlyChart(false)}
+          />
+        )}
         {weather && !loadingWeather && (
-          <WeatherCard weather={weather} onClose={() => setWeather(null)} />
+          <WeatherCard
+            weather={weather}
+            onClose={() => { setWeather(null); setShowHourlyChart(false); setShowAlerts(false); }}
+            onShowHourly={() => setShowHourlyChart((v) => !v)}
+            onShowAlerts={() => setShowAlerts((v) => !v)}
+          />
         )}
         {showMountains && (
           <MountainPanel
@@ -435,7 +596,7 @@ export default function GlobeScreen() {
             onClose={() => setElevationProfile(null)}
           />
         )}
-      </View>
+      </ScrollView>
 
       {!ready && (
         <View style={styles.loadingOverlay}>
@@ -468,7 +629,8 @@ const styles = StyleSheet.create({
   },
   toolBtnActive: { borderColor: '#7eb8f7', backgroundColor: '#2d4a7a' },
   toolBtnText: { color: '#7eb8f7', fontSize: 12, fontWeight: '600' },
-  overlays: { position: 'absolute', bottom: 0, left: 0, right: 0 },
+  overlays: { position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '60%' },
+  overlaysContent: { flexGrow: 1, justifyContent: 'flex-end' },
   loadingBar: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#1a2035cc', margin: 10, padding: 10, borderRadius: 8, gap: 8,
