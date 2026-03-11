@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { StyleSheet, View, Platform } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -21,10 +21,15 @@ export interface CesiumWebViewRef {
   showSlopeLayer(tilesUrl: string | null): void;
   clearLayers(): void;
   replayTrack(geojsonFC: object, opts?: { durationSec?: number }): void;
-  setToken(token: string): void;
 }
 
 interface Props {
+  /**
+   * Full URL to the Cesium HTML page served by the backend.
+   * Example: "http://192.168.1.5:8000/static/cesium/index.html?token=eyJ..."
+   * The token is embedded in the URL so Cesium can use it on startup.
+   */
+  sourceUri: string;
   onMessage?: (msg: BridgeMessage) => void;
   onReady?: () => void;
   style?: object;
@@ -32,15 +37,13 @@ interface Props {
 
 // ─── Component ─────────────────────────────────────────────────────────────
 
-const CesiumWebView = forwardRef<CesiumWebViewRef, Props>(({ onMessage, onReady, style }, ref) => {
+const CesiumWebView = forwardRef<CesiumWebViewRef, Props>(({ sourceUri, onMessage, onReady, style }, ref) => {
   const webViewRef = useRef<WebView>(null);
 
-  // Inject a JS call into the CesiumJS context
   const inject = useCallback((js: string) => {
     webViewRef.current?.injectJavaScript(`(function(){ try { ${js} } catch(e) { console.warn('[Bridge]', e); } })(); true;`);
   }, []);
 
-  // Expose bridge methods to parent components
   useImperativeHandle(ref, () => ({
     flyTo(lat, lon, altitude) {
       inject(`cesiumBridge.flyTo(${lat}, ${lon}, ${altitude ?? 5000});`);
@@ -75,9 +78,6 @@ const CesiumWebView = forwardRef<CesiumWebViewRef, Props>(({ onMessage, onReady,
       const optsJson = opts ? JSON.stringify(opts) : '{}';
       inject(`cesiumBridge.replayTrack(${JSON.stringify(geojsonFC)}, ${optsJson});`);
     },
-    setToken(token) {
-      inject(`cesiumBridge.setToken('${token}');`);
-    },
   }));
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
@@ -90,39 +90,20 @@ const CesiumWebView = forwardRef<CesiumWebViewRef, Props>(({ onMessage, onReady,
     }
   }, [onMessage, onReady]);
 
-  // Determine source: on web use uri, on native use bundled HTML
-  const source = Platform.select({
-    web: { uri: '/cesium/index.html' },
-    default: { uri: 'file:///android_asset/cesium/index.html' }, // overridden by asset bundling
-  });
-
-  // For native, use the bundled HTML file from the cesium/ directory
-  const nativeSource =
-    Platform.OS === 'ios'
-      ? require('../cesium/index.html')
-      : { uri: 'file:///android_asset/cesium/index.html' };
-
   return (
     <View style={[styles.container, style]}>
       <WebView
         ref={webViewRef}
-        source={Platform.OS === 'ios' ? nativeSource : source}
+        source={{ uri: sourceUri }}
         style={styles.webview}
         onMessage={handleMessage}
         javaScriptEnabled
         domStorageEnabled
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
-        allowsFullscreenVideo={false}
         originWhitelist={['*']}
         mixedContentMode="always"
         geolocationEnabled
-        // iOS: allow local file access
-        allowFileAccess
-        allowFileAccessFromFileURLs
-        allowUniversalAccessFromFileURLs
-        // Android: allow asset loading
-        androidLayerType="hardware"
         onError={(e) => console.warn('[CesiumWebView] error:', e.nativeEvent)}
       />
     </View>

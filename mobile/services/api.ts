@@ -1,13 +1,20 @@
 // API client for the Mountain Explorer FastAPI backend
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
+const DEFAULT_BASE_URL = 'http://localhost:8000';
+
+async function getBaseUrl(): Promise<string> {
+  const stored = await AsyncStorage.getItem('@settings/apiUrl');
+  return stored || DEFAULT_BASE_URL;
+}
 
 interface ApiOptions {
   signal?: AbortSignal;
 }
 
 async function apiRequest<T>(path: string, init?: RequestInit & ApiOptions): Promise<T> {
-  const url = `${BASE_URL}${path}`;
+  const base = await getBaseUrl();
+  const url = `${base}${path}`;
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,

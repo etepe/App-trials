@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Mountain Explorer Globe</title>
+  <script>
+    // Read Cesium Ion token from URL parameter (?token=xxx)
+    // This allows the React Native app to pass the token without code changes
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      window.CESIUM_ION_TOKEN = params.get('token') || '';
+    })();
+  </script>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #cesiumContainer {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #0a0f1e;
+    }
+    #cesiumContainer { position: absolute; top: 0; left: 0; }
+    .cesium-widget-credits { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <script src="cesium-app.js"></script>
+</body>
+</html>

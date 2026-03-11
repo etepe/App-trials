@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,19 +7,21 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Modal,
   Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import CesiumWebView, { BridgeMessage, CesiumWebViewRef } from '../../components/CesiumWebView';
 import { searchMountains, getWeather, analyzeTerain, Mountain, WeatherData } from '../../services/api';
 import { getCachedMountains, cacheMountains } from '../../services/storage/offlineCache';
+
+const DEFAULT_API_URL = 'http://localhost:8000';
 
 // ─── Weather Card ───────────────────────────────────────────────────────────
 
 function WeatherCard({ weather, onClose }: { weather: WeatherData; onClose: () => void }) {
   const w = weather.current;
   const deg2compass = (d: number) => {
-    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const dirs = ['N', 'KD', 'D', 'GD', 'G', 'GB', 'B', 'KB'];
     return dirs[Math.round(d / 45) % 8];
   };
 
@@ -33,7 +35,7 @@ function WeatherCard({ weather, onClose }: { weather: WeatherData; onClose: () =
     <View style={wStyles.card}>
       <View style={wStyles.header}>
         <Text style={wStyles.title}>
-          Weather  {weather.elevation_m > 0 ? `(${Math.round(weather.elevation_m)}m)` : ''}
+          Hava Durumu {weather.elevation_m > 0 ? `(${Math.round(weather.elevation_m)}m)` : ''}
         </Text>
         <TouchableOpacity onPress={onClose}><Text style={wStyles.close}>✕</Text></TouchableOpacity>
       </View>
@@ -41,11 +43,11 @@ function WeatherCard({ weather, onClose }: { weather: WeatherData; onClose: () =
       <View style={wStyles.row}>
         <View style={wStyles.stat}>
           <Text style={wStyles.statVal}>{Math.round(w.temperature_c)}°C</Text>
-          <Text style={wStyles.statLbl}>Temp</Text>
+          <Text style={wStyles.statLbl}>Sıcaklık</Text>
         </View>
         <View style={wStyles.stat}>
           <Text style={wStyles.statVal}>{(w.wind_speed_ms * 3.6).toFixed(0)} km/h</Text>
-          <Text style={wStyles.statLbl}>Wind {deg2compass(w.wind_direction_deg)}</Text>
+          <Text style={wStyles.statLbl}>Rüzgar {deg2compass(w.wind_direction_deg)}</Text>
         </View>
         {w.pressure_hpa && (
           <View style={wStyles.stat}>
@@ -58,11 +60,15 @@ function WeatherCard({ weather, onClose }: { weather: WeatherData; onClose: () =
       {weather.thermals && (
         <View style={[wStyles.thermalBar, { borderColor: thermalColor }]}>
           <Text style={[wStyles.thermalText, { color: thermalColor }]}>
-            Thermals: {weather.thermals.conditions.toUpperCase()}
+            Termik:{' '}
+            {weather.thermals.conditions === 'excellent' ? 'Mükemmel'
+              : weather.thermals.conditions === 'good' ? 'İyi'
+              : weather.thermals.conditions === 'moderate' ? 'Orta'
+              : 'Zayıf'}
           </Text>
           {weather.thermals.thermal_height_m && (
             <Text style={wStyles.thermalSub}>
-              Top ~{Math.round(weather.thermals.thermal_height_m)}m
+              Tavan ~{Math.round(weather.thermals.thermal_height_m)}m
             </Text>
           )}
         </View>
@@ -99,7 +105,7 @@ function MountainPanel({
   return (
     <View style={mStyles.panel}>
       <View style={mStyles.header}>
-        <Text style={mStyles.title}>Nearby Peaks ({mountains.length})</Text>
+        <Text style={mStyles.title}>Yakın Zirveler ({mountains.length})</Text>
         <TouchableOpacity onPress={onClose}><Text style={mStyles.close}>✕</Text></TouchableOpacity>
       </View>
       <ScrollView style={mStyles.list} showsVerticalScrollIndicator={false}>
@@ -131,6 +137,12 @@ const mStyles = StyleSheet.create({
 
 export default function GlobeScreen() {
   const cesiumRef = useRef<CesiumWebViewRef>(null);
+
+  // Settings loaded from AsyncStorage
+  const [apiUrl, setApiUrl] = useState<string>(DEFAULT_API_URL);
+  const [cesiumToken, setCesiumToken] = useState<string>('');
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
   const [ready, setReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -141,12 +153,29 @@ export default function GlobeScreen() {
   const [analysisMode, setAnalysisMode] = useState<'slope' | 'aspect' | null>(null);
   const [lastClickPos, setLastClickPos] = useState<{ lat: number; lon: number; elevation: number } | null>(null);
 
+  // Load settings from AsyncStorage on mount
+  useEffect(() => {
+    (async () => {
+      const [url, token] = await Promise.all([
+        AsyncStorage.getItem('@settings/apiUrl'),
+        AsyncStorage.getItem('@settings/cesiumToken'),
+      ]);
+      if (url) setApiUrl(url);
+      if (token) setCesiumToken(token);
+      setSettingsLoaded(true);
+    })();
+  }, []);
+
+  // Build Cesium WebView URL — token passed as query param so index.html can read it
+  const cesiumUrl = `${apiUrl}/static/cesium/index.html${
+    cesiumToken ? `?token=${encodeURIComponent(cesiumToken)}` : ''
+  }`;
+
   const handleMessage = useCallback(async (msg: BridgeMessage) => {
     if (msg.action === 'mapClick') {
       const { lat, lon, elevation } = msg.payload;
       setLastClickPos({ lat, lon, elevation });
 
-      // Fetch weather for clicked position
       setLoadingWeather(true);
       try {
         const w = await getWeather(lat, lon, elevation);
@@ -159,14 +188,14 @@ export default function GlobeScreen() {
     }
 
     if (msg.action === 'peakSelected') {
-      const { osmId, lat, lon, elevation } = msg.payload;
+      const { lat, lon, elevation } = msg.payload;
       cesiumRef.current?.flyToLocation(lat, lon, (elevation ?? 0) + 2000, 0, -30);
     }
   }, []);
 
   const handleSearch = useCallback(async () => {
     if (!lastClickPos && !searchQuery) {
-      Alert.alert('Tap a location', 'Tap on the map first to set a search center.');
+      Alert.alert('Konum seç', 'Önce haritada bir noktaya dokunun.');
       return;
     }
     const lat = lastClickPos?.lat ?? 46.0;
@@ -174,16 +203,12 @@ export default function GlobeScreen() {
 
     setSearching(true);
     try {
-      // Check cache first
       const cached = await getCachedMountains(lat, lon, 25);
       let results: Mountain[] = cached ?? [];
 
       if (!cached) {
         results = await searchMountains(lat, lon, 25, searchQuery || undefined);
-        await cacheMountains(
-          lat,
-          lon,
-          25,
+        await cacheMountains(lat, lon, 25,
           results.map((r) => ({ osmId: r.osm_id, name: r.name, lat: r.lat, lon: r.lon, elevation: r.elevation, type: r.type }))
         );
       }
@@ -191,13 +216,12 @@ export default function GlobeScreen() {
       setMountains(results);
       setShowMountains(results.length > 0);
 
-      // Add markers
       cesiumRef.current?.clearMarkers();
       results.slice(0, 30).forEach((m) => {
         cesiumRef.current?.addMarker(m.lat, m.lon, m.name, m.osm_id, m.elevation);
       });
     } catch (e) {
-      Alert.alert('Search failed', String(e));
+      Alert.alert('Arama başarısız', String(e));
     } finally {
       setSearching(false);
     }
@@ -210,11 +234,11 @@ export default function GlobeScreen() {
 
   const handleAnalysis = useCallback(async (type: 'slope' | 'aspect') => {
     if (!lastClickPos) {
-      Alert.alert('Select area', 'Tap on a mountain area first.');
+      Alert.alert('Alan seç', 'Önce bir dağ bölgesine dokunun.');
       return;
     }
     const { lat, lon } = lastClickPos;
-    const delta = 0.1; // ~11km box
+    const delta = 0.1;
     try {
       const result = await analyzeTerain(
         { minLon: lon - delta, minLat: lat - delta, maxLon: lon + delta, maxLat: lat + delta },
@@ -225,14 +249,23 @@ export default function GlobeScreen() {
         setAnalysisMode(type);
       }
     } catch (e) {
-      Alert.alert('Analysis failed', String(e));
+      Alert.alert('Analiz başarısız', String(e));
     }
   }, [lastClickPos]);
+
+  if (!settingsLoaded) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color="#7eb8f7" size="large" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <CesiumWebView
         ref={cesiumRef}
+        sourceUri={cesiumUrl}
         onReady={() => setReady(true)}
         onMessage={handleMessage}
         style={styles.globe}
@@ -242,7 +275,7 @@ export default function GlobeScreen() {
       <View style={styles.searchBar}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search mountains…"
+          placeholder="Dağ ara…"
           placeholderTextColor="#4a5568"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -253,7 +286,7 @@ export default function GlobeScreen() {
           {searching ? (
             <ActivityIndicator color="#7eb8f7" size="small" />
           ) : (
-            <Text style={styles.searchBtnText}>Search</Text>
+            <Text style={styles.searchBtnText}>Ara</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -263,29 +296,21 @@ export default function GlobeScreen() {
         <TouchableOpacity
           style={[styles.toolBtn, analysisMode === 'slope' && styles.toolBtnActive]}
           onPress={() => {
-            if (analysisMode === 'slope') {
-              cesiumRef.current?.clearLayers();
-              setAnalysisMode(null);
-            } else {
-              handleAnalysis('slope');
-            }
+            if (analysisMode === 'slope') { cesiumRef.current?.clearLayers(); setAnalysisMode(null); }
+            else handleAnalysis('slope');
           }}
         >
-          <Text style={styles.toolBtnText}>Slope</Text>
+          <Text style={styles.toolBtnText}>Eğim</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.toolBtn, analysisMode === 'aspect' && styles.toolBtnActive]}
           onPress={() => {
-            if (analysisMode === 'aspect') {
-              cesiumRef.current?.clearLayers();
-              setAnalysisMode(null);
-            } else {
-              handleAnalysis('aspect');
-            }
+            if (analysisMode === 'aspect') { cesiumRef.current?.clearLayers(); setAnalysisMode(null); }
+            else handleAnalysis('aspect');
           }}
         >
-          <Text style={styles.toolBtnText}>Aspect</Text>
+          <Text style={styles.toolBtnText}>Bakı</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -298,23 +323,21 @@ export default function GlobeScreen() {
             setWeather(null);
           }}
         >
-          <Text style={styles.toolBtnText}>Clear</Text>
+          <Text style={styles.toolBtnText}>Temizle</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Overlays at bottom */}
+      {/* Bottom overlays */}
       <View style={styles.overlays}>
         {loadingWeather && (
           <View style={styles.loadingBar}>
             <ActivityIndicator color="#7eb8f7" size="small" />
-            <Text style={styles.loadingText}>Fetching weather…</Text>
+            <Text style={styles.loadingText}>Hava durumu yükleniyor…</Text>
           </View>
         )}
-
         {weather && !loadingWeather && (
           <WeatherCard weather={weather} onClose={() => setWeather(null)} />
         )}
-
         {showMountains && (
           <MountainPanel
             mountains={mountains}
@@ -327,7 +350,8 @@ export default function GlobeScreen() {
       {!ready && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator color="#7eb8f7" size="large" />
-          <Text style={styles.loadingOverlayText}>Loading 3D Globe…</Text>
+          <Text style={styles.loadingOverlayText}>3D Küre yükleniyor…</Text>
+          <Text style={styles.loadingOverlaySub}>İlk yüklemede biraz bekleyebilir</Text>
         </View>
       )}
     </View>
@@ -337,71 +361,33 @@ export default function GlobeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0f1e' },
   globe: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   searchBar: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    right: 12,
+    position: 'absolute', top: 12, left: 12, right: 12,
     flexDirection: 'row',
     backgroundColor: '#1a2035dd',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#2a3050',
-    overflow: 'hidden',
+    borderRadius: 10, borderWidth: 1, borderColor: '#2a3050', overflow: 'hidden',
   },
-  searchInput: {
-    flex: 1,
-    color: '#e8eaf6',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
-  searchBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    justifyContent: 'center',
-    backgroundColor: '#2d4a7a',
-  },
+  searchInput: { flex: 1, color: '#e8eaf6', paddingHorizontal: 14, paddingVertical: 10, fontSize: 14 },
+  searchBtn: { paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', backgroundColor: '#2d4a7a' },
   searchBtnText: { color: '#7eb8f7', fontWeight: '700', fontSize: 13 },
-  toolbar: {
-    position: 'absolute',
-    top: 64,
-    right: 12,
-    gap: 8,
-  },
+  toolbar: { position: 'absolute', top: 64, right: 12 },
   toolBtn: {
-    backgroundColor: '#1a2035dd',
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2a3050',
-    marginBottom: 6,
+    backgroundColor: '#1a2035dd', paddingVertical: 7, paddingHorizontal: 12,
+    borderRadius: 8, borderWidth: 1, borderColor: '#2a3050', marginBottom: 6,
   },
   toolBtnActive: { borderColor: '#7eb8f7', backgroundColor: '#2d4a7a' },
   toolBtnText: { color: '#7eb8f7', fontSize: 12, fontWeight: '600' },
-  overlays: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
+  overlays: { position: 'absolute', bottom: 0, left: 0, right: 0 },
   loadingBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a2035cc',
-    margin: 10,
-    padding: 10,
-    borderRadius: 8,
-    gap: 8,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#1a2035cc', margin: 10, padding: 10, borderRadius: 8, gap: 8,
   },
   loadingText: { color: '#7eb8f7', fontSize: 13 },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#0a0f1ecc',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
+    backgroundColor: '#0a0f1ecc', alignItems: 'center', justifyContent: 'center', gap: 12,
   },
   loadingOverlayText: { color: '#7eb8f7', fontSize: 15 },
+  loadingOverlaySub: { color: '#4a5568', fontSize: 12 },
 });
