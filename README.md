@@ -1,8 +1,18 @@
 # Mountain Explorer — 3D Outdoor Activity App
 
-Doga sporculari (yamac parasutuculer, dagcilar, yuruyusculer) icin gelistirilmis, **CesiumJS** tabanli 3D kure gezgini ve arazi analiz uygulamasi.
+> Doga sporculari icin 3D arazi gezgini — CesiumJS kure, geocoding ile konum arama, GPS destegi, GPX/FIT/IGC/KML rota analizi, egim/baki haritalari, hava durumu ve dag guvenligi uyarilari. React Native (Expo) + FastAPI + OpenStreetMap + Open-Meteo
 
-Uygulama, uydu goruntuleri uzerinde gercek zamanli arazi modelleme, hava durumu tahmini, GPS rota analizi ve dag arama/kesif islevleri sunar.
+Yamac parasutuculer, dagcilar ve yuruyusculer icin gelistirilmis, **CesiumJS** tabanli 3D kure gezgini ve arazi analiz uygulamasi. Uydu goruntuleri uzerinde gercek zamanli arazi modelleme, hava durumu tahmini, GPS rota analizi ve dag arama/kesif islevleri sunar.
+
+### Son Surum Ozellikleri (v1.1)
+- Yer adi ile arama (Nominatim geocoding) — "Uludag", "Everest" gibi isimlerle arama
+- Mobil cihazda GPS ile mevcut konum kullanma
+- Koordinat gerektirmeden global dag zirve arama
+- Gelismis 3D modelleme: golge, sis, atmosfer, arazi abartma, FXAA
+- Olcum araclari (mesafe + alan), gorus alani analizi
+- 3D rota duvar gorsellestirmesi ve yukseklik renkli rotalar
+- Cig riski hesaplayicisi ve dag guvenligi uyari sistemi
+- Saatlik ruzgar profilleri (10m/80m/120m yukseklik)
 
 ---
 
