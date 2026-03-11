@@ -66,8 +66,12 @@ export default function TracksScreen() {
         const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
         const buffer = _b64ToArrayBuffer(b64);
         parsed = await parseKmz(buffer);
+      } else if (ext === 'csv' || ext === 'log') {
+        const { parseCsv } = await import('../../../shared/parsers/varioParser');
+        const content = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.UTF8 });
+        parsed = await parseCsv(content);
       } else {
-        Alert.alert('Unsupported format', `Files with .${ext} extension are not supported.\nSupported: GPX, FIT, IGC, KML, KMZ`);
+        Alert.alert('Unsupported format', `Files with .${ext} extension are not supported.\nSupported: GPX, FIT, IGC, KML, KMZ, CSV`);
         return;
       }
 
@@ -127,7 +131,7 @@ export default function TracksScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No tracks yet</Text>
           <Text style={styles.emptyDesc}>
-            Import a GPX, FIT, IGC, or KML/KMZ file to visualize it on the 3D globe.
+            Import a GPX, FIT, IGC, KML/KMZ, or CSV file to visualize it on the 3D globe.
           </Text>
           <TouchableOpacity style={styles.emptyBtn} onPress={handleImport}>
             <Text style={styles.emptyBtnText}>Import Track</Text>
