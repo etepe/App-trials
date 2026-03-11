@@ -98,7 +98,7 @@ export function getMountain(osmId: string, opts?: ApiOptions): Promise<Mountain>
 
 // ─── Terrain analysis ────────────────────────────────────────────────────────
 
-export type AnalysisType = 'slope' | 'aspect' | 'profile';
+export type AnalysisType = 'slope' | 'aspect' | 'profile' | 'contour';
 
 export interface BBox {
   minLon: number;
@@ -109,7 +109,8 @@ export interface BBox {
 
 export interface TerrainAnalysisResult {
   analysis_type: AnalysisType;
-  tiles_url?: string;         // XYZ tile URL for slope/aspect layers
+  overlay_image?: string;     // URL to overlay PNG image
+  bbox?: number[];            // [minLon, minLat, maxLon, maxLat]
   profile?: ElevationPoint[]; // for 'profile' type
   stats?: {
     min_slope_deg?: number;

@@ -16,7 +16,7 @@ class BBox(BaseModel):
 
 class TerrainAnalysisRequest(BaseModel):
     bbox: BBox
-    analysis_type: Literal["slope", "aspect", "profile"]
+    analysis_type: Literal["slope", "aspect", "profile", "contour"]
 
 
 class ElevationPoint(BaseModel):
@@ -35,7 +35,8 @@ class TerrainStats(BaseModel):
 
 class TerrainAnalysisResult(BaseModel):
     analysis_type: str
-    tiles_url: Optional[str] = None
+    overlay_image: Optional[str] = None
+    bbox: Optional[List[float]] = None
     profile: Optional[List[ElevationPoint]] = None
     stats: Optional[TerrainStats] = None
 
@@ -44,13 +45,14 @@ class TerrainAnalysisResult(BaseModel):
 async def analyze_terrain(request: TerrainAnalysisRequest):
     """
     Analyze terrain within a bounding box.
-    - slope: Returns color-coded slope angle map as XYZ tile URL
-    - aspect: Returns aspect (facing direction) map as XYZ tile URL
+    - slope: Returns color-coded slope angle overlay image + stats
+    - aspect: Returns aspect (facing direction) overlay image + stats
+    - contour: Returns contour lines overlay image
     - profile: Returns elevation profile along the bbox diagonal
     """
     bbox = (request.bbox.minLon, request.bbox.minLat, request.bbox.maxLon, request.bbox.maxLat)
     area_deg2 = (request.bbox.maxLon - request.bbox.minLon) * (request.bbox.maxLat - request.bbox.minLat)
-    if area_deg2 > 1.0:  # ~111km x 111km max
+    if area_deg2 > 1.0:
         raise HTTPException(status_code=400, detail="Bounding box too large (max ~1 degree²)")
 
     try:
