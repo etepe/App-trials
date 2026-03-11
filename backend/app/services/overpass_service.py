@@ -2,6 +2,7 @@
 Overpass API service — fetch mountain peaks from OpenStreetMap.
 Uses the public Overpass API (rate-limited; cache results on the client).
 """
+import re
 import httpx
 from typing import Optional, List
 from app.models.mountain import Mountain
@@ -9,9 +10,26 @@ from app.models.mountain import Mountain
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 TIMEOUT = 20.0
 
+# Only allow alphanumeric, spaces, hyphens, dots, and common diacritics
+_SAFE_NAME_RE = re.compile(r'^[\w\s\-.\u00C0-\u024F\u0400-\u04FF]+$', re.UNICODE)
+
+
+def _sanitize_name(name: str) -> str:
+    """Sanitize user input to prevent Overpass QL injection."""
+    name = name.strip()[:100]  # limit length
+    # Remove characters that could break Overpass QL syntax
+    name = name.replace('"', '').replace("'", '').replace('\\', '').replace(']', '').replace('[', '')
+    if not name or not _SAFE_NAME_RE.match(name):
+        return ""
+    return name
+
 
 def _build_query(lat: float, lon: float, radius_m: int, name_filter: Optional[str]) -> str:
-    name_clause = f'["name"~"{name_filter}",i]' if name_filter else '["name"]'
+    if name_filter:
+        safe_name = _sanitize_name(name_filter)
+        name_clause = f'["name"~"{safe_name}",i]' if safe_name else '["name"]'
+    else:
+        name_clause = '["name"]'
     return f"""
 [out:json][timeout:15];
 (
