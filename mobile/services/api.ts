@@ -64,6 +64,60 @@ export async function checkServerHealth(): Promise<boolean> {
   }
 }
 
+// ─── Geocoding ──────────────────────────────────────────────────────────────
+
+export interface GeocodingResult {
+  name: string;
+  display_name: string;
+  lat: number;
+  lon: number;
+  type: string;
+  importance: number;
+  bbox?: number[];
+}
+
+export function geocodeSearch(
+  query: string,
+  limit = 10,
+  lang = 'tr',
+  opts?: ApiOptions
+): Promise<GeocodingResult[]> {
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(limit),
+    lang,
+  });
+  return apiRequest<GeocodingResult[]>(`/geocode/search?${params}`, opts);
+}
+
+export function reverseGeocode(
+  lat: number,
+  lon: number,
+  lang = 'tr',
+  opts?: ApiOptions
+): Promise<GeocodingResult> {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lon),
+    lang,
+  });
+  return apiRequest<GeocodingResult>(`/geocode/reverse?${params}`, opts);
+}
+
+// ─── Mountains (by name, no coordinates needed) ─────────────────────────────
+
+export function searchMountainsByName(
+  name: string,
+  limit = 20,
+  opts?: ApiOptions
+): Promise<Mountain[]> {
+  const params = new URLSearchParams({
+    name,
+    limit: String(limit),
+  });
+  return apiRequest<Mountain[]>(`/mountains/by-name?${params}`, opts);
+}
+
 // ─── Mountains ──────────────────────────────────────────────────────────────
 
 export interface Mountain {

@@ -10,12 +10,18 @@ import {
   Alert,
   Keyboard,
   Platform,
+  FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import CesiumWebView, { BridgeMessage, CesiumWebViewRef } from '../../components/CesiumWebView';
-import { searchMountains, getWeather, analyzeTerrain, Mountain, WeatherData, ElevationPoint } from '../../services/api';
+import {
+  searchMountains, searchMountainsByName, getWeather, analyzeTerrain,
+  geocodeSearch, GeocodingResult,
+  Mountain, WeatherData, ElevationPoint,
+} from '../../services/api';
 import { getCachedMountains, cacheMountains, loadTrackGeojson, listTracks } from '../../services/storage/offlineCache';
 import ElevationProfile from '../../components/ElevationProfile';
 import HourlyForecastChart from '../../components/HourlyForecastChart';
@@ -444,6 +450,12 @@ export default function GlobeScreen() {
   const [showHourlyChart, setShowHourlyChart] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
 
+  // Geocoding & location state
+  const [geocodeResults, setGeocodeResults] = useState<GeocodingResult[]>([]);
+  const [showGeocodeResults, setShowGeocodeResults] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [locatingUser, setLocatingUser] = useState(false);
+
   // New 3D feature state
   const [terrainExaggeration, setTerrainExaggeration] = useState(1);
   const [showToolsExpanded, setShowToolsExpanded] = useState(false);
@@ -542,38 +554,136 @@ export default function GlobeScreen() {
   }, [measureMode]);
 
   const handleSearch = useCallback(async () => {
-    if (!lastClickPos && !searchQuery) {
-      Alert.alert('Konum sec', 'Once haritada bir noktaya dokunun.');
+    const query = searchQuery.trim();
+    if (!query && !lastClickPos && !userLocation) {
+      Alert.alert('Konum veya isim girin', 'Bir yer adi yazin, haritaya dokunun veya konumunuzu kullanin.');
       return;
     }
-    const lat = lastClickPos?.lat ?? 46.0;
-    const lon = lastClickPos?.lon ?? 7.5;
 
     setSearching(true);
+    setShowGeocodeResults(false);
     try {
-      const cached = await getCachedMountains(lat, lon, 25);
-      let results: Mountain[] = cached ?? [];
+      if (query) {
+        // Step 1: Geocode the query to find the location
+        const geoResults = await geocodeSearch(query, 8);
 
-      if (!cached) {
-        results = await searchMountains(lat, lon, 25, searchQuery || undefined);
-        await cacheMountains(lat, lon, 25,
-          results.map((r) => ({ osmId: r.osm_id, name: r.name, lat: r.lat, lon: r.lon, elevation: r.elevation, type: r.type }))
-        );
+        if (geoResults.length > 0) {
+          setGeocodeResults(geoResults);
+          setShowGeocodeResults(true);
+
+          // Also search for mountain peaks by name
+          try {
+            const peakResults = await searchMountainsByName(query, 15);
+            if (peakResults.length > 0) {
+              setMountains(peakResults);
+              setShowMountains(true);
+              cesiumRef.current?.clearMarkers();
+              peakResults.slice(0, 30).forEach((m) => {
+                cesiumRef.current?.addMarker(m.lat, m.lon, m.name, m.osm_id, m.elevation);
+              });
+            }
+          } catch {
+            // Peak search is optional, don't fail the whole search
+          }
+
+          // Fly to the first geocode result
+          const first = geoResults[0];
+          cesiumRef.current?.flyToLocation(first.lat, first.lon, 8000, 0, -35);
+          setLastClickPos({ lat: first.lat, lon: first.lon, elevation: 0 });
+        } else {
+          Alert.alert('Sonuc bulunamadi', `"${query}" icin bir yer bulunamadi.`);
+        }
+      } else {
+        // No query text — search nearby peaks using lastClickPos or userLocation
+        const lat = lastClickPos?.lat ?? userLocation?.lat ?? 39.9;
+        const lon = lastClickPos?.lon ?? userLocation?.lon ?? 32.8;
+
+        const cached = await getCachedMountains(lat, lon, 25);
+        let results: Mountain[] = cached ?? [];
+
+        if (!cached) {
+          results = await searchMountains(lat, lon, 25);
+          await cacheMountains(lat, lon, 25,
+            results.map((r) => ({ osmId: r.osm_id, name: r.name, lat: r.lat, lon: r.lon, elevation: r.elevation, type: r.type }))
+          );
+        }
+
+        setMountains(results);
+        setShowMountains(results.length > 0);
+
+        cesiumRef.current?.clearMarkers();
+        results.slice(0, 30).forEach((m) => {
+          cesiumRef.current?.addMarker(m.lat, m.lon, m.name, m.osm_id, m.elevation);
+        });
       }
-
-      setMountains(results);
-      setShowMountains(results.length > 0);
-
-      cesiumRef.current?.clearMarkers();
-      results.slice(0, 30).forEach((m) => {
-        cesiumRef.current?.addMarker(m.lat, m.lon, m.name, m.osm_id, m.elevation);
-      });
     } catch (e) {
       Alert.alert('Arama basarisiz', String(e));
     } finally {
       setSearching(false);
     }
-  }, [lastClickPos, searchQuery]);
+  }, [lastClickPos, searchQuery, userLocation]);
+
+  const handleGeocodeSelect = useCallback((result: GeocodingResult) => {
+    setShowGeocodeResults(false);
+    setSearchQuery(result.name);
+    const altitude = result.type === 'peak' || result.type === 'mountain' ? 6000 : 10000;
+    cesiumRef.current?.flyToLocation(result.lat, result.lon, altitude, 0, -35);
+    setLastClickPos({ lat: result.lat, lon: result.lon, elevation: 0 });
+
+    // Search for nearby peaks at the selected location
+    (async () => {
+      try {
+        const results = await searchMountains(result.lat, result.lon, 25);
+        if (results.length > 0) {
+          setMountains(results);
+          setShowMountains(true);
+          cesiumRef.current?.clearMarkers();
+          results.slice(0, 30).forEach((m) => {
+            cesiumRef.current?.addMarker(m.lat, m.lon, m.name, m.osm_id, m.elevation);
+          });
+        }
+      } catch {
+        // silently ignore
+      }
+    })();
+  }, []);
+
+  const handleUseMyLocation = useCallback(async () => {
+    setLocatingUser(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Konum izni', 'Konum erisimi reddedildi. Ayarlardan izin verin.');
+        return;
+      }
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const { latitude: lat, longitude: lon } = location.coords;
+      setUserLocation({ lat, lon });
+      setLastClickPos({ lat, lon, elevation: location.coords.altitude ?? 0 });
+      cesiumRef.current?.flyToLocation(lat, lon, 5000, 0, -35);
+
+      // Auto-search for nearby peaks
+      try {
+        const results = await searchMountains(lat, lon, 25);
+        if (results.length > 0) {
+          setMountains(results);
+          setShowMountains(true);
+          cesiumRef.current?.clearMarkers();
+          results.slice(0, 30).forEach((m) => {
+            cesiumRef.current?.addMarker(m.lat, m.lon, m.name, m.osm_id, m.elevation);
+          });
+        }
+      } catch {
+        // silently ignore
+      }
+    } catch (e) {
+      Alert.alert('Konum alinamadi', String(e));
+    } finally {
+      setLocatingUser(false);
+    }
+  }, []);
 
   const handleMountainSelect = useCallback((m: Mountain) => {
     cesiumRef.current?.flyToLocation(m.lat, m.lon, (m.elevation ?? 1000) + 2500, 0, -35);
@@ -691,6 +801,8 @@ export default function GlobeScreen() {
     setMeasurePointCount(0);
     setMeasureResult(null);
     setShowViewshed(false);
+    setShowGeocodeResults(false);
+    setGeocodeResults([]);
   }, []);
 
   if (!settingsLoaded) {
@@ -712,28 +824,86 @@ export default function GlobeScreen() {
       />
 
       {/* Search bar */}
-      <View style={[styles.searchBar, { top: Math.max(insets.top + 4, 12) }]}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Dag ara..."
-          placeholderTextColor="#4a5568"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onSubmitEditing={handleSearch}
-          returnKeyType="search"
-          blurOnSubmit
-        />
-        <TouchableOpacity
-          style={styles.searchBtn}
-          onPress={() => { Keyboard.dismiss(); handleSearch(); }}
-          disabled={searching}
-        >
-          {searching ? (
-            <ActivityIndicator color="#7eb8f7" size="small" />
-          ) : (
-            <Text style={styles.searchBtnText}>Ara</Text>
-          )}
-        </TouchableOpacity>
+      <View style={[styles.searchContainer, { top: Math.max(insets.top + 4, 12) }]}>
+        <View style={styles.searchBar}>
+          <TouchableOpacity
+            style={styles.locationBtn}
+            onPress={handleUseMyLocation}
+            disabled={locatingUser}
+          >
+            {locatingUser ? (
+              <ActivityIndicator color="#2ecc71" size="small" />
+            ) : (
+              <Text style={styles.locationBtnText}>
+                {userLocation ? '●' : '◎'}
+              </Text>
+            )}
+          </TouchableOpacity>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Yer veya dag adi ara... (ornek: Uludag)"
+            placeholderTextColor="#4a5568"
+            value={searchQuery}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              if (!text.trim()) {
+                setShowGeocodeResults(false);
+                setGeocodeResults([]);
+              }
+            }}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+            blurOnSubmit
+          />
+          <TouchableOpacity
+            style={styles.searchBtn}
+            onPress={() => { Keyboard.dismiss(); handleSearch(); }}
+            disabled={searching}
+          >
+            {searching ? (
+              <ActivityIndicator color="#7eb8f7" size="small" />
+            ) : (
+              <Text style={styles.searchBtnText}>Ara</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Geocode results dropdown */}
+        {showGeocodeResults && geocodeResults.length > 0 && (
+          <View style={styles.geocodeDropdown}>
+            <FlatList
+              data={geocodeResults}
+              keyExtractor={(item, index) => `${item.lat}-${item.lon}-${index}`}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.geocodeItem}
+                  onPress={() => handleGeocodeSelect(item)}
+                  activeOpacity={0.6}
+                >
+                  <View style={styles.geocodeItemIcon}>
+                    <Text style={styles.geocodeIcon}>
+                      {item.type === 'peak' || item.type === 'mountain' ? '⛰'
+                        : item.type === 'city' || item.type === 'town' || item.type === 'village' ? '🏘'
+                        : item.type === 'administrative' ? '📍'
+                        : '📌'}
+                    </Text>
+                  </View>
+                  <View style={styles.geocodeItemContent}>
+                    <Text style={styles.geocodeName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.geocodeDetail} numberOfLines={1}>{item.display_name}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+            <TouchableOpacity
+              style={styles.geocodeClose}
+              onPress={() => setShowGeocodeResults(false)}
+            >
+              <Text style={styles.geocodeCloseText}>Kapat</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Main toolbar */}
@@ -958,15 +1128,43 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   // Search bar
+  searchContainer: {
+    position: 'absolute', left: 12, right: 12, zIndex: 100,
+  },
   searchBar: {
-    position: 'absolute', left: 12, right: 12,
     flexDirection: 'row',
     backgroundColor: '#1a2035ee',
     borderRadius: 10, borderWidth: 1, borderColor: '#2a3050', overflow: 'hidden',
+    alignItems: 'center',
   },
-  searchInput: { flex: 1, color: '#e8eaf6', paddingHorizontal: 14, paddingVertical: 10, fontSize: 14 },
+  locationBtn: {
+    paddingHorizontal: 10, paddingVertical: 10, justifyContent: 'center', alignItems: 'center',
+    borderRightWidth: 1, borderRightColor: '#2a3050',
+  },
+  locationBtnText: { color: '#2ecc71', fontSize: 18, fontWeight: '700' },
+  searchInput: { flex: 1, color: '#e8eaf6', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
   searchBtn: { paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', backgroundColor: '#2d4a7a' },
   searchBtnText: { color: '#7eb8f7', fontWeight: '700', fontSize: 13 },
+
+  // Geocode dropdown
+  geocodeDropdown: {
+    backgroundColor: '#1a2035f5', borderRadius: 10, borderWidth: 1, borderColor: '#2a3050',
+    marginTop: 4, maxHeight: 240, overflow: 'hidden',
+  },
+  geocodeItem: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12,
+    borderBottomWidth: 1, borderBottomColor: '#242d45',
+  },
+  geocodeItemIcon: { width: 30, alignItems: 'center' },
+  geocodeIcon: { fontSize: 16 },
+  geocodeItemContent: { flex: 1, marginLeft: 6 },
+  geocodeName: { color: '#e8eaf6', fontSize: 14, fontWeight: '600' },
+  geocodeDetail: { color: '#6b7a99', fontSize: 11, marginTop: 1 },
+  geocodeClose: {
+    paddingVertical: 8, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#2a3050',
+    backgroundColor: '#242d45',
+  },
+  geocodeCloseText: { color: '#6b7a99', fontSize: 12 },
 
   // Toolbar (right)
   toolbar: { position: 'absolute', right: 12 },

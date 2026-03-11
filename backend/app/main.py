@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import mountains, terrain, weather, tracks, favorites
+from app.routers import mountains, terrain, weather, tracks, favorites, geocode
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
@@ -104,6 +104,7 @@ app.include_router(terrain.router, prefix="/terrain", tags=["terrain"])
 app.include_router(weather.router, prefix="/weather", tags=["weather"])
 app.include_router(tracks.router, prefix="/tracks", tags=["tracks"])
 app.include_router(favorites.router, prefix="/favorites", tags=["favorites"])
+app.include_router(geocode.router, prefix="/geocode", tags=["geocode"])
 
 
 @app.get("/health")

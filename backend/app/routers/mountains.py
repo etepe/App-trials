@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, HTTPException
 from typing import List, Optional
 
 from app.models.mountain import Mountain
-from app.services.overpass_service import search_peaks, get_peak
+from app.services.overpass_service import search_peaks, search_peaks_by_name, get_peak
 
 router = APIRouter()
 
@@ -17,6 +17,19 @@ async def search_mountains(
     """Search for mountain peaks near a coordinate using OpenStreetMap Overpass API."""
     try:
         mountains = await search_peaks(lat, lon, radius_km, query)
+        return mountains
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Overpass API error: {e}")
+
+
+@router.get("/by-name", response_model=List[Mountain])
+async def search_by_name(
+    name: str = Query(..., min_length=1, max_length=100, description="Peak name to search"),
+    limit: int = Query(20, ge=1, le=50, description="Max results"),
+):
+    """Search for mountain peaks globally by name (no coordinates needed)."""
+    try:
+        mountains = await search_peaks_by_name(name, limit)
         return mountains
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Overpass API error: {e}")

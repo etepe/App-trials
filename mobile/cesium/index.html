@@ -4,6 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Mountain Explorer Globe</title>
+  <script>
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      window.CESIUM_ION_TOKEN = params.get('token') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI4MDM5ZDkwMi0xYzE5LTQ5YTAtOGVjMy1kNjVlMTA2ODMyYjIiLCJpZCI6NDAxNzc0LCJpYXQiOjE3NzMyMjEyOTR9._feJ-vrSxwMhme_t-96nBj8-QVRFdwy3fQbiCIhINRI';
+    })();
+  </script>
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Cesium.js"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
   <style>
