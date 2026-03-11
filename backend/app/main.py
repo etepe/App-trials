@@ -27,9 +27,11 @@ app = FastAPI(
     description="Backend for the 3D Mountain Explorer mobile app",
 )
 
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
