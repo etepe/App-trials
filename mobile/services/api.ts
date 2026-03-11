@@ -146,31 +146,86 @@ export interface WeatherData {
   elevation_m: number;
   current: {
     temperature_c: number;
+    feels_like_c?: number;
+    humidity_pct?: number;
     wind_speed_ms: number;
     wind_direction_deg: number;
     wind_gusts_ms?: number;
     pressure_hpa?: number;
     cloud_cover_pct?: number;
     weather_code?: number;
+    weather_description?: string;
+    visibility_m?: number;
+    uv_index?: number;
+    freezing_level_m?: number;
+    is_day?: boolean;
   };
   hourly?: HourlyWeather[];
+  daily?: DailyWeather[];
   thermals?: ThermalConditions;
+  avalanche_risk?: AvalancheRisk;
+  alerts?: WeatherAlert[];
 }
 
 export interface HourlyWeather {
   time: string;
   temperature_c: number;
   wind_speed_ms: number;
+  wind_speed_80m_ms?: number | null;
+  wind_speed_120m_ms?: number | null;
   wind_direction_deg: number;
+  wind_direction_80m_deg?: number | null;
+  wind_direction_120m_deg?: number | null;
+  wind_gusts_ms?: number | null;
   precipitation_mm: number;
+  precipitation_probability_pct?: number | null;
+  snowfall_cm?: number | null;
   cloud_cover_pct: number;
+  visibility_m?: number | null;
+  uv_index?: number | null;
+  freezing_level_m?: number | null;
+  temp_80m_c?: number | null;
+  temp_120m_c?: number | null;
+  cape?: number | null;
+}
+
+export interface DailyWeather {
+  date: string;
+  weather_code?: number;
+  weather_description?: string;
+  temp_max_c?: number;
+  temp_min_c?: number;
+  sunrise?: string;
+  sunset?: string;
+  uv_index_max?: number;
+  precipitation_sum_mm?: number;
+  snowfall_sum_cm?: number;
+  wind_speed_max_ms?: number;
+  wind_gusts_max_ms?: number;
+  wind_direction_dominant_deg?: number;
 }
 
 export interface ThermalConditions {
-  thermal_index: number;        // 0-10
-  best_time_utc?: string;
+  thermal_index: number;
+  best_window_start?: number;
+  best_window_end?: number;
   thermal_height_m?: number;
   conditions: 'poor' | 'moderate' | 'good' | 'excellent';
+}
+
+export interface AvalancheRisk {
+  level: number;           // 1-5 European scale
+  label: string;
+  description: string;
+  risk_score: number;
+}
+
+export interface WeatherAlert {
+  type: string;
+  severity: 'critical' | 'warning' | 'info';
+  title: string;
+  message: string;
+  icon: string;
 }
 
 export function getWeather(
@@ -187,6 +242,20 @@ export function getWeather(
     days: String(days),
   });
   return apiRequest<WeatherData>(`/weather?${params}`, opts);
+}
+
+export function getWeatherAlerts(
+  lat: number,
+  lon: number,
+  elevation: number,
+  opts?: ApiOptions
+): Promise<{ lat: number; lon: number; alerts: WeatherAlert[]; avalanche_risk: AvalancheRisk }> {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lon),
+    elevation: String(elevation),
+  });
+  return apiRequest(`/weather/alerts?${params}`, opts);
 }
 
 // ─── Tracks ──────────────────────────────────────────────────────────────────
